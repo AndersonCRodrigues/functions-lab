@@ -1,0 +1,232 @@
+name: Avaliação Automática
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  avaliar-javascript:
+    name: "🟨 JavaScript"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: javascript
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Instalar dependências
+        run: npm install
+
+      - name: Rodar testes e gerar relatório
+        id: jest
+        run: |
+          npx jest --json --outputFile=../jest-results.json || true
+
+      - name: Gerar Job Summary (tabela de resultados JS)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const raw = fs.readFileSync('jest-results.json', 'utf8');
+            const data = JSON.parse(raw);
+
+            const obrigatorios = [];
+            const bonus = [];
+
+            for (const suite of data.testResults) {
+              for (const t of suite.testResults) {
+                const passed = t.status === 'passed';
+                const name = t.ancestorTitles[0] || t.title;
+                const num = parseInt(name.match(/\d+/)?.[0] || '0');
+                const entry = { name, passed, num };
+                if (num >= 11) bonus.push(entry);
+                else obrigatorios.push(entry);
+              }
+            }
+
+            // deduplica por nome de suite
+            const dedup = (arr) => {
+              const seen = new Set();
+              return arr.filter(e => {
+                if (seen.has(e.name)) return false;
+                seen.add(e.name);
+                return true;
+              });
+            };
+
+            const ob = dedup(obrigatorios).sort((a,b) => a.num - b.num);
+            const bn = dedup(bonus).sort((a,b) => a.num - b.num);
+
+            const passedOb = ob.filter(e => e.passed).length;
+            const passedBn = bn.filter(e => e.passed).length;
+            const pctOb = ob.length ? ((passedOb / ob.length) * 100).toFixed(1) : '0.0';
+            const pctTotal = (ob.length + bn.length)
+              ? (((passedOb + passedBn) / (ob.length + bn.length)) * 100).toFixed(1)
+              : '0.0';
+
+            const desempenho = parseFloat(pctOb) >= 70 ? '✅ Aprovado' : '❌ Insuficiente';
+
+            let summary = `## 📊 Resultado do Projeto — JavaScript\n\n`;
+            summary += `| Item | Resultado |\n|---|---|\n`;
+            summary += `| Desempenho | **${desempenho}** |\n`;
+            summary += `| Percentual de requisitos obrigatórios | **${pctOb}%** |\n`;
+            summary += `| Percentual de requisitos totais | **${pctTotal}%** |\n\n`;
+
+            summary += `## Resultado por requisito\n\n`;
+            summary += `| # | Nome | Avaliação |\n|---|---|:---:|\n`;
+            for (const e of ob) {
+              summary += `| ${e.num} | ${e.name.replace(/Desafio \d+ - /, '')} | ${e.passed ? '✅' : '❌'} |\n`;
+            }
+
+            if (bn.length) {
+              summary += `\n### ⭐ Bônus\n\n`;
+              summary += `| # | Nome | Avaliação |\n|---|---|:---:|\n`;
+              for (const e of bn) {
+                summary += `| ${e.num} | ${e.name.replace(/Desafio \d+ \(Bônus\) - /, '')} | ${e.passed ? '✅' : '❌'} |\n`;
+              }
+            }
+
+            await core.summary.addRaw(summary).write();
+
+  avaliar-python:
+    name: "🐍 Python"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar pytest
+        run: pip install pytest pytest-json-report
+
+      - name: Rodar testes e gerar relatório
+        run: |
+          pytest --json-report --json-report-file=../pytest-results.json || true
+
+      - name: Gerar Job Summary (tabela de resultados Python)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const raw = fs.readFileSync('pytest-results.json', 'utf8');
+            const data = JSON.parse(raw);
+
+            const obrigatorios = [];
+            const bonus = [];
+
+            for (const t of data.tests || []) {
+              const className = t.nodeid.split('::')[1] || '';
+              const passed = t.outcome === 'passed';
+              const num = parseInt(className.match(/\d+/)?.[0] || '0');
+              const entry = { name: className, passed, num };
+              if (num >= 11) bonus.push(entry);
+              else obrigatorios.push(entry);
+            }
+
+            const dedup = (arr) => {
+              const seen = new Set();
+              // marca como passed só se TODOS os testes da suite passarem
+              const map = {};
+              for (const e of arr) {
+                if (!map[e.name]) map[e.name] = { ...e, passed: true };
+                if (!e.passed) map[e.name].passed = false;
+              }
+              return Object.values(map).sort((a,b) => a.num - b.num);
+            };
+
+            const ob = dedup(obrigatorios);
+            const bn = dedup(bonus);
+
+            const passedOb = ob.filter(e => e.passed).length;
+            const passedBn = bn.filter(e => e.passed).length;
+            const pctOb = ob.length ? ((passedOb / ob.length) * 100).toFixed(1) : '0.0';
+            const pctTotal = (ob.length + bn.length)
+              ? (((passedOb + passedBn) / (ob.length + bn.length)) * 100).toFixed(1)
+              : '0.0';
+
+            const desempenho = parseFloat(pctOb) >= 70 ? '✅ Aprovado' : '❌ Insuficiente';
+
+            // Mapa de nomes bonitos
+            const nomes = {
+              'TestCompareTrue': 'Crie uma função usando o operador &&',
+              'TestCalcArea': 'Crie uma função que calcule a área de um triângulo',
+              'TestSplitSentence': 'Crie uma função que divida uma frase',
+              'TestConcatName': 'Crie uma função que use concatenação de strings',
+              'TestFootballPoints': 'Crie uma função de pontos no campeonato',
+              'TestHighestCount': 'Crie uma função que calcule repetições do maior número',
+              'TestCatAndMouse': 'Crie uma função de Caça ao Rato',
+              'TestFizzBuzz': 'Crie uma função FizzBuzz',
+              'TestEncodeDecode': 'Crie uma função que Codifique e Decodifique',
+              'TestTechList': 'Crie uma função de Lista de Tecnologias',
+              'TestGeneratePhoneNumber': 'Crie uma função de número de telefone',
+              'TestTriangleCheck': 'Crie uma função de existência de triângulo',
+              'TestHydrate': 'Crie uma função de boas-vindas ao Bar',
+            };
+
+            let summary = `## 📊 Resultado do Projeto — Python\n\n`;
+            summary += `| Item | Resultado |\n|---|---|\n`;
+            summary += `| Desempenho | **${desempenho}** |\n`;
+            summary += `| Percentual de requisitos obrigatórios | **${pctOb}%** |\n`;
+            summary += `| Percentual de requisitos totais | **${pctTotal}%** |\n\n`;
+
+            summary += `## Resultado por requisito\n\n`;
+            summary += `| # | Nome | Avaliação |\n|---|---|:---:|\n`;
+            for (const e of ob) {
+              const label = nomes[e.name] || e.name;
+              summary += `| ${e.num} | ${label} | ${e.passed ? '✅' : '❌'} |\n`;
+            }
+
+            if (bn.length) {
+              summary += `\n### ⭐ Bônus\n\n`;
+              summary += `| # | Nome | Avaliação |\n|---|---|:---:|\n`;
+              for (const e of bn) {
+                const label = nomes[e.name] || e.name;
+                summary += `| ${e.num} | ${label} | ${e.passed ? '✅' : '❌'} |\n`;
+              }
+            }
+
+            await core.summary.addRaw(summary).write();
+
+  comentar-no-pr:
+    name: "💬 Comentar no PR"
+    needs: [avaliar-javascript, avaliar-python]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Comentar resultado geral
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const jsStatus = '${{ needs.avaliar-javascript.result }}';
+            const pyStatus = '${{ needs.avaliar-python.result }}';
+
+            const icon = (s) => s === 'success' ? '✅' : '❌';
+
+            const body = [
+              '## 🤖 Resultado da Avaliação Automática',
+              '',
+              '| Linguagem | Status |',
+              '|---|:---:|',
+              `| 🟨 JavaScript | ${icon(jsStatus)} |`,
+              `| 🐍 Python     | ${icon(pyStatus)} |`,
+              '',
+              '> Clique em **Details** ao lado de cada check para ver a tabela completa de requisitos.',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
