@@ -378,4 +378,4 @@ Para configurar em um fork ou repositório próprio:
 3. Marque: **Require a pull request before merging**
 4. Marque: **Require status checks to pass before merging**
 5. Adicione os checks: `Lint JavaScript`, `Lint Python`, `Testes JavaScript`, `Testes Python`
-6. Marque: **Do not allow bypassing the above settings**
+6. Marque: **Do not allow bypassing the above settings**# teste CI
