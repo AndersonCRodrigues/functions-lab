@@ -10,6 +10,12 @@ Desafios de lógica em **JavaScript** e **Python** com correção automática vi
 
 ```
 functions-lab/
+├── .github/
+│   └── workflows/
+│       └── tests.yml        ← pipeline de CI (não editar)
+├── .vscode/
+│   ├── tasks.json           ← atalhos de teste no VSCode
+│   └── extensions.json      ← extensões recomendadas
 ├── javascript/
 │   ├── challenges.js        ← implemente aqui (JS)
 │   └── challenges.test.js   ← testes automáticos (não editar)
@@ -22,55 +28,95 @@ functions-lab/
 
 ## ⚠️ Regras importantes
 
-- **Não altere o nome das funções** — os testes automáticos dependem dos nomes exatos
+- **Não altere o nome das funções** — os testes dependem dos nomes exatos
 - **Não altere os arquivos de teste** (`challenges.test.js` e `test_challenges.py`)
-- **Não deixe `console.log` ou `print` de debug** no código antes de enviar
-- **O PR só será avaliado se o lint passar** — veja a seção de lint abaixo
+- **Não deixe `console.log` ou `print` de debug** — o lint vai rejeitar
+- **O lint precisa passar** para os testes rodarem no CI
 - Os parâmetros das funções **podem** ser alterados se necessário
+- **Não é possível fazer merge direto na `main`** — use sempre PR
 
 ---
 
 ## 🛠️ Como entregar
 
 ### 1. Clone o repositório
+
 ```bash
 git clone git@github.com:AndersonCRodrigues/functions-lab.git
 cd functions-lab
 ```
 
 ### 2. Crie sua branch com seu nome
+
 ```bash
 git checkout -b seu-nome-functions-lab
 ```
 
-### 3. Implemente as funções
-
-**JavaScript** → edite `javascript/challenges.js`
-**Python** → edite `python/challenges.py`
-
-### 4. Verifique o lint antes de enviar
-
-```bash
-# JavaScript (ESLint)
-cd javascript && npm install && npm run lint
-
-# Python (Flake8)
-cd python && pip install flake8 && flake8 challenges.py
-```
-
-> ⚠️ PRs com erros de lint **não serão aceitos**.
-
-### 5. Rode os testes localmente
+### 3. Instale as dependências
 
 ```bash
 # JavaScript
-cd javascript && npm test
+cd javascript && npm install && cd ..
 
 # Python
-cd python && pip install pytest && pytest -v
+cd python && pip install pytest flake8 pytest-json-report && cd ..
 ```
 
-### 6. Abra o Pull Request
+### 4. Implemente as funções
+
+- **JavaScript** → edite `javascript/challenges.js`
+- **Python** → edite `python/challenges.py`
+
+### 5. Rode os testes localmente antes de enviar
+
+---
+
+## 🧪 Rodando testes localmente
+
+### Opção A — Terminal
+
+```bash
+# JavaScript: testes
+cd javascript && npm test
+
+# JavaScript: lint
+cd javascript && npm run lint
+
+# Python: testes
+cd python && pytest -v
+
+# Python: lint
+cd python && flake8 challenges.py
+```
+
+### Opção B — VSCode (recomendado)
+
+1. Abra o projeto no VSCode
+2. Instale as extensões recomendadas quando solicitado (ou vá em `Extensions > @recommended`)
+3. Use `Ctrl+Shift+P` → **Tasks: Run Task** e escolha:
+   - `JS: Rodar testes`
+   - `JS: Lint`
+   - `Python: Rodar testes`
+   - `Python: Lint`
+   - `Rodar tudo (JS + Python)`
+4. Para JavaScript, o painel **Testing** (ícone de frasco no lado esquerdo) mostra cada teste com ✅/❌ em tempo real graças à extensão `vscode-jest`
+5. Para Python, o painel **Testing** funciona com a extensão `Python Test Adapter`
+
+> **Dica:** pressione `Ctrl+Shift+T` (ou `Cmd+Shift+T` no Mac) para abrir o painel Testing diretamente.
+
+### Interpretando os resultados
+
+| Saída | Significado |
+|---|---|
+| `PASS` / `passed` | Função correta ✅ |
+| `FAIL` / `failed` | Algo está errado — leia o erro abaixo do teste |
+| `ESLint: error` | Problema de lint — corrija antes de enviar o PR |
+| `E501` (flake8) | Linha muito longa (máx 79 chars) |
+| `C901` (flake8) | Função com complexidade alta — divida em funções menores |
+
+---
+
+## 6. Envie e abra o PR
 
 ```bash
 git add .
@@ -78,8 +124,7 @@ git commit -m "feat: implementa desafios"
 git push origin seu-nome-functions-lab
 ```
 
-Abra o PR no GitHub apontando para `main`.
-Os testes e o lint rodam automaticamente e você verá a tabela de resultados! ✅
+Abra o Pull Request no GitHub apontando para `main`. O CI roda automaticamente e posta os resultados como comentário no PR.
 
 ---
 
@@ -89,27 +134,21 @@ Os testes e o lint rodam automaticamente e você verá a tabela de resultados! �
 
 ```bash
 cd javascript
-npm install
 npm run lint
 ```
 
-Se houver problemas, eles aparecerão no terminal com o arquivo e a linha. Corrija todos antes de abrir o PR.
+Regras aplicadas: `eslint:recommended` + `no-console` (warn) + `no-unused-vars` (error) + complexidade máxima 10.
 
 ### Python — Flake8
 
 ```bash
 cd python
-pip install flake8
 flake8 challenges.py
 ```
 
-Regras aplicadas:
-- Linha com no máximo **79 caracteres**
-- **Complexidade ciclomática máxima de 10** por função (sem funções gigantes ou com muitos `if/else` aninhados)
-- Sem imports não utilizados
-- Sem variáveis declaradas e nunca usadas
+Regras: linha máx 79 chars, complexidade ciclomática máx 10, sem imports não utilizados.
 
-> 💡 Se o Flake8 apontar complexidade alta, divida a lógica em funções auxiliares.
+> Se o Flake8 reclamar de complexidade (`C901`), divida a lógica em funções auxiliares.
 
 ---
 
@@ -154,9 +193,9 @@ calcArea(51, 1)  → 25.5
 Recebe uma string e retorna um array com as palavras separadas por espaço.
 
 ```
-splitSentence('go Trybe')     → ['go', 'Trybe']
+splitSentence('go Trybe')      → ['go', 'Trybe']
 splitSentence('vamo que vamo') → ['vamo', 'que', 'vamo']
-splitSentence('foguete')      → ['foguete']
+splitSentence('foguete')       → ['foguete']
 ```
 
 ---
@@ -209,12 +248,12 @@ Recebe três números: posição do `mouse`, do `cat1` e do `cat2`. Retorna qual
 - `'os gatos trombam e o rato foge'` se estiverem à mesma distância
 
 ```
-catAndMouse(2, 5, 4) → 'cat2'
+catAndMouse(2, 5, 4)  → 'cat2'
 catAndMouse(6, 12, 18) → 'cat1'
-catAndMouse(5, 3, 7) → 'os gatos trombam e o rato foge'
+catAndMouse(5, 3, 7)  → 'os gatos trombam e o rato foge'
 ```
 
-> 💡 Use valor absoluto para calcular distância: `Math.abs()` (JS) ou `abs()` (Python)
+> 💡 Use valor absoluto: `Math.abs()` (JS) ou `abs()` (Python)
 
 ---
 
@@ -237,16 +276,14 @@ fizzBuzz([9, 25])            → ['fizz', 'buzz']
 
 ### 9 — `encode` / `decode`
 
-**`encode`**: troca vogais minúsculas por números:
-`a→1, e→2, i→3, o→4, u→5`
+**`encode`**: troca vogais minúsculas por números: `a→1, e→2, i→3, o→4, u→5`
 
-**`decode`**: faz o inverso:
-`1→a, 2→e, 3→i, 4→o, 5→u`
+**`decode`**: faz o inverso: `1→a, 2→e, 3→i, 4→o, 5→u`
 
 ```
-encode('hello')          → 'h2ll4'
-encode('How are you?')   → 'H4w 1r2 y45?'
-decode('h3 th2r2!')      → 'hi there!'
+encode('hello')        → 'h2ll4'
+encode('How are you?') → 'H4w 1r2 y45?'
+decode('h3 th2r2!')    → 'hi there!'
 ```
 
 ---
@@ -255,7 +292,7 @@ decode('h3 th2r2!')      → 'hi there!'
 
 Recebe um array de tecnologias e um nome. Retorna uma lista de objetos `{ tech, name }` ordenada **alfabeticamente** pela tecnologia.
 
-- Retorna `'Vazio!'` se o array estiver vazio
+- Retorna `'Vazio!'` se o array estiver vazio.
 
 ```javascript
 techList(['React', 'Jest', 'HTML', 'CSS', 'JavaScript'], 'Lucas')
@@ -302,24 +339,20 @@ triangleCheck(1, 2, 10)  → false
 triangleCheck(3, 7, 4)   → false
 ```
 
-> 💡 Pesquise por `Math.abs` (JS) ou `abs()` (Python)
-
 ---
 
 ### 13 ⭐ — `hydrate`
 
-Recebe uma string com bebidas e quantidades e retorna quantos copos de água beber (1 copo por dose de bebida alcoólica).
+Recebe uma string com bebidas e quantidades e retorna quantos copos de água beber (1 por dose).
 
-- A string sempre terá o formato: `quantidade (número de 1-9) + tipo da bebida`
+- A string sempre terá o formato: `quantidade (1-9) + tipo da bebida`
 - Se total = 1 → `'1 copo de água'`
 - Se total > 1 → `'X copos de água'`
 
 ```
-hydrate('1 cerveja')                           → '1 copo de água'
-hydrate('1 cachaça, 5 cervejas e 1 vinho')    → '7 copos de água'
+hydrate('1 cerveja')                        → '1 copo de água'
+hydrate('1 cachaça, 5 cervejas e 1 vinho') → '7 copos de água'
 ```
-
-> 💡 Pesquise como extrair todos os números inteiros de uma string em JS/Python
 
 ---
 
@@ -332,3 +365,17 @@ hydrate('1 cachaça, 5 cervejas e 1 vinho')    → '7 copos de água'
 | Bônus | Desafios 11–13 contam no percentual total |
 
 **≥ 70% dos requisitos obrigatórios = Aprovado ✅**
+
+---
+
+## 🔒 Proteção da branch `main`
+
+A branch `main` está protegida. **Não é possível fazer push direto ou merge sem PR.**
+
+Para configurar em um fork ou repositório próprio:
+1. Vá em **Settings → Branches → Add branch protection rule**
+2. Branch name pattern: `main`
+3. Marque: **Require a pull request before merging**
+4. Marque: **Require status checks to pass before merging**
+5. Adicione os checks: `Lint JavaScript`, `Lint Python`, `Testes JavaScript`, `Testes Python`
+6. Marque: **Do not allow bypassing the above settings**
