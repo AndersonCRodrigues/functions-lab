@@ -1,0 +1,11 @@
+{
+  "name": "playground-functions-js",
+  "version": "1.0.0",
+  "description": "Desafios de lógica em JavaScript",
+  "scripts": {
+    "test": "jest --coverage"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0"
+  }
+}
