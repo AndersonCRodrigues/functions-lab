@@ -53,6 +53,11 @@ jobs:
         run: npm install
       - name: Rodar testes
         run: npx jest --json --outputFile=../jest-results.json || true
+      - name: Upload resultados
+        uses: actions/upload-artifact@v4
+        with:
+          name: jest-results
+          path: jest-results.json
       - name: Gerar Job Summary
         uses: actions/github-script@v7
         with:
@@ -65,7 +70,9 @@ jobs:
             const bonus = [];
 
             for (const suite of data.testResults) {
-              for (const t of suite.testResults) {
+              // Jest JSON usa assertionResults, não testResults
+              const assertions = suite.assertionResults || [];
+              for (const t of assertions) {
                 const passed = t.status === 'passed';
                 const name = t.ancestorTitles[0] || t.title;
                 const num = parseInt(name.match(/\d+/)?.[0] || '0');
@@ -128,6 +135,11 @@ jobs:
         run: pip install pytest pytest-json-report
       - name: Rodar testes
         run: pytest --json-report --json-report-file=../pytest-results.json || true
+      - name: Upload resultados
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results
+          path: pytest-results.json
       - name: Gerar Job Summary
         uses: actions/github-script@v7
         with:
@@ -137,26 +149,38 @@ jobs:
             const data = JSON.parse(raw);
 
             const nomes = {
-              'TestCompareTrue': 'Crie uma função usando o operador &&',
-              'TestCalcArea': 'Crie uma função que calcule a área de um triângulo',
-              'TestSplitSentence': 'Crie uma função que divida uma frase',
-              'TestConcatName': 'Crie uma função que use concatenação de strings',
-              'TestFootballPoints': 'Crie uma função de pontos no campeonato',
-              'TestHighestCount': 'Crie uma função que calcule repetições do maior número',
-              'TestCatAndMouse': 'Crie uma função de Caça ao Rato',
-              'TestFizzBuzz': 'Crie uma função FizzBuzz',
-              'TestEncodeDecode': 'Crie uma função que Codifique e Decodifique',
-              'TestTechList': 'Crie uma função de Lista de Tecnologias',
-              'TestGeneratePhoneNumber': 'Crie uma função de número de telefone',
-              'TestTriangleCheck': 'Crie uma função de existência de triângulo',
-              'TestHydrate': 'Crie uma função de boas-vindas ao Bar',
+              'TestCompareTrue': 'compareTrue / compare_true',
+              'TestCalcArea': 'calcArea / calc_area',
+              'TestSplitSentence': 'splitSentence / split_sentence',
+              'TestConcatName': 'concatName / concat_name',
+              'TestFootballPoints': 'footballPoints / football_points',
+              'TestHighestCount': 'highestCount / highest_count',
+              'TestCatAndMouse': 'catAndMouse / cat_and_mouse',
+              'TestFizzBuzz': 'fizzBuzz / fizz_buzz',
+              'TestEncodeDecode': 'encode / decode',
+              'TestTechList': 'techList / tech_list',
+              'TestGeneratePhoneNumber': 'generatePhoneNumber / generate_phone_number',
+              'TestTriangleCheck': 'triangleCheck / triangle_check',
+              'TestHydrate': 'hydrate',
+            };
+            const numeros = {
+              'TestCompareTrue': 1, 'TestCalcArea': 2, 'TestSplitSentence': 3,
+              'TestConcatName': 4, 'TestFootballPoints': 5, 'TestHighestCount': 6,
+              'TestCatAndMouse': 7, 'TestFizzBuzz': 8, 'TestEncodeDecode': 9,
+              'TestTechList': 10, 'TestGeneratePhoneNumber': 11,
+              'TestTriangleCheck': 12, 'TestHydrate': 13,
             };
 
             const map = {};
             for (const t of data.tests || []) {
               const className = t.nodeid.split('::')[1] || '';
-              const num = parseInt(className.match(/\d+/)?.[0] || '0');
-              if (!map[className]) map[className] = { name: className, passed: true, num };
+              if (!map[className]) {
+                map[className] = {
+                  name: className,
+                  passed: true,
+                  num: numeros[className] || 0,
+                };
+              }
               if (t.outcome !== 'passed') map[className].passed = false;
             }
 
@@ -195,16 +219,88 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - name: Comentar resultado geral
+      - name: Download jest-results
+        uses: actions/download-artifact@v4
+        with:
+          name: jest-results
+        continue-on-error: true
+
+      - name: Download pytest-results
+        uses: actions/download-artifact@v4
+        with:
+          name: pytest-results
+        continue-on-error: true
+
+      - name: Comentar resultado no PR
         uses: actions/github-script@v7
         with:
           script: |
-            const jsLint  = '${{ needs.lint-javascript.result }}';
-            const pyLint  = '${{ needs.lint-python.result }}';
-            const jsTest  = '${{ needs.avaliar-javascript.result }}';
-            const pyTest  = '${{ needs.avaliar-python.result }}';
+            const fs = require('fs');
+            const jsLint = '${{ needs.lint-javascript.result }}';
+            const pyLint = '${{ needs.lint-python.result }}';
+            const jsTest = '${{ needs.avaliar-javascript.result }}';
+            const pyTest = '${{ needs.avaliar-python.result }}';
 
             const icon = (s) => s === 'success' ? '✅' : s === 'skipped' ? '⏭️' : '❌';
+
+            const buildJsTable = () => {
+              try {
+                const data = JSON.parse(fs.readFileSync('jest-results.json', 'utf8'));
+                const map = {};
+                for (const suite of data.testResults) {
+                  for (const t of (suite.assertionResults || [])) {
+                    const name = t.ancestorTitles[0] || t.title;
+                    const num = parseInt(name.match(/\d+/)?.[0] || '0');
+                    if (!map[name]) map[name] = { name, passed: true, num };
+                    if (t.status !== 'passed') map[name].passed = false;
+                  }
+                }
+                const rows = Object.values(map).sort((a, b) => a.num - b.num);
+                if (!rows.length) return '';
+                let t = '\n\n<details><summary>📋 Detalhes JavaScript</summary>\n\n';
+                t += '| # | Desafio | Resultado |\n|---|---|:---:|\n';
+                for (const r of rows) {
+                  t += `| ${r.num} | ${r.name.replace(/Desafio \d+ (\(Bônus\) )?- /, '')} | ${r.passed ? '✅' : '❌'} |\n`;
+                }
+                return t + '\n</details>';
+              } catch (_) { return ''; }
+            };
+
+            const buildPyTable = () => {
+              try {
+                const data = JSON.parse(fs.readFileSync('pytest-results.json', 'utf8'));
+                const nomes = {
+                  'TestCompareTrue': 'compare_true', 'TestCalcArea': 'calc_area',
+                  'TestSplitSentence': 'split_sentence', 'TestConcatName': 'concat_name',
+                  'TestFootballPoints': 'football_points', 'TestHighestCount': 'highest_count',
+                  'TestCatAndMouse': 'cat_and_mouse', 'TestFizzBuzz': 'fizz_buzz',
+                  'TestEncodeDecode': 'encode / decode', 'TestTechList': 'tech_list',
+                  'TestGeneratePhoneNumber': 'generate_phone_number',
+                  'TestTriangleCheck': 'triangle_check', 'TestHydrate': 'hydrate',
+                };
+                const numeros = {
+                  'TestCompareTrue': 1, 'TestCalcArea': 2, 'TestSplitSentence': 3,
+                  'TestConcatName': 4, 'TestFootballPoints': 5, 'TestHighestCount': 6,
+                  'TestCatAndMouse': 7, 'TestFizzBuzz': 8, 'TestEncodeDecode': 9,
+                  'TestTechList': 10, 'TestGeneratePhoneNumber': 11,
+                  'TestTriangleCheck': 12, 'TestHydrate': 13,
+                };
+                const map = {};
+                for (const t of (data.tests || [])) {
+                  const cls = t.nodeid.split('::')[1] || '';
+                  if (!map[cls]) map[cls] = { name: cls, passed: true, num: numeros[cls] || 0 };
+                  if (t.outcome !== 'passed') map[cls].passed = false;
+                }
+                const rows = Object.values(map).sort((a, b) => a.num - b.num);
+                if (!rows.length) return '';
+                let t = '\n\n<details><summary>📋 Detalhes Python</summary>\n\n';
+                t += '| # | Desafio | Resultado |\n|---|---|:---:|\n';
+                for (const r of rows) {
+                  t += `| ${r.num} | ${nomes[r.name] || r.name} | ${r.passed ? '✅' : '❌'} |\n`;
+                }
+                return t + '\n</details>';
+              } catch (_) { return ''; }
+            };
 
             const body = [
               '## 🤖 Resultado da Avaliação Automática',
@@ -215,8 +311,26 @@ jobs:
               `| 🧪 Testes | ${icon(jsTest)} | ${icon(pyTest)} |`,
               '',
               '> ⚠️ Os testes só rodam se o lint passar.',
-              '> Clique em **Details** ao lado de cada check para ver a tabela completa.',
+              '> Para ver percentuais detalhados, clique em **Details** ao lado de cada check.',
+              buildJsTable(),
+              buildPyTable(),
             ].join('\n');
+
+            // Remove comentário anterior do bot para não acumular
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            for (const c of comments) {
+              if (c.user.type === 'Bot' && c.body.includes('Resultado da Avaliação Automática')) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: c.id,
+                });
+              }
+            }
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
