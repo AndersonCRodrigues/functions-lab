@@ -5,29 +5,55 @@ on:
     branches: [main]
 
 jobs:
-  avaliar-javascript:
-    name: "🟨 JavaScript"
+  lint-javascript:
+    name: "🔍 Lint JavaScript (ESLint)"
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: javascript
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-
       - name: Instalar dependências
         run: npm install
+      - name: Rodar ESLint
+        run: npm run lint
 
-      - name: Rodar testes e gerar relatório
-        id: jest
-        run: |
-          npx jest --json --outputFile=../jest-results.json || true
+  lint-python:
+    name: "🔍 Lint Python (Flake8)"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar Flake8
+        run: pip install flake8
+      - name: Rodar Flake8
+        run: flake8 challenges.py
 
-      - name: Gerar Job Summary (tabela de resultados JS)
+  avaliar-javascript:
+    name: "🟨 Testes JavaScript (Jest)"
+    runs-on: ubuntu-latest
+    needs: lint-javascript
+    defaults:
+      run:
+        working-directory: javascript
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Instalar dependências
+        run: npm install
+      - name: Rodar testes
+        run: npx jest --json --outputFile=../jest-results.json || true
+      - name: Gerar Job Summary
         uses: actions/github-script@v7
         with:
           script: |
@@ -49,72 +75,60 @@ jobs:
               }
             }
 
-            // deduplica por nome de suite
             const dedup = (arr) => {
-              const seen = new Set();
-              return arr.filter(e => {
-                if (seen.has(e.name)) return false;
-                seen.add(e.name);
-                return true;
-              });
+              const map = {};
+              for (const e of arr) {
+                if (!map[e.name]) map[e.name] = { ...e, passed: true };
+                if (!e.passed) map[e.name].passed = false;
+              }
+              return Object.values(map).sort((a, b) => a.num - b.num);
             };
 
-            const ob = dedup(obrigatorios).sort((a,b) => a.num - b.num);
-            const bn = dedup(bonus).sort((a,b) => a.num - b.num);
-
+            const ob = dedup(obrigatorios);
+            const bn = dedup(bonus);
             const passedOb = ob.filter(e => e.passed).length;
             const passedBn = bn.filter(e => e.passed).length;
             const pctOb = ob.length ? ((passedOb / ob.length) * 100).toFixed(1) : '0.0';
             const pctTotal = (ob.length + bn.length)
               ? (((passedOb + passedBn) / (ob.length + bn.length)) * 100).toFixed(1)
               : '0.0';
-
             const desempenho = parseFloat(pctOb) >= 70 ? '✅ Aprovado' : '❌ Insuficiente';
 
-            let summary = `## 📊 Resultado do Projeto — JavaScript\n\n`;
+            let summary = `## 📊 Resultado — JavaScript\n\n`;
             summary += `| Item | Resultado |\n|---|---|\n`;
             summary += `| Desempenho | **${desempenho}** |\n`;
-            summary += `| Percentual de requisitos obrigatórios | **${pctOb}%** |\n`;
-            summary += `| Percentual de requisitos totais | **${pctTotal}%** |\n\n`;
-
+            summary += `| Requisitos obrigatórios | **${pctOb}%** (${passedOb}/${ob.length}) |\n`;
+            summary += `| Requisitos totais | **${pctTotal}%** |\n\n`;
             summary += `## Resultado por requisito\n\n`;
             summary += `| # | Nome | Avaliação |\n|---|---|:---:|\n`;
             for (const e of ob) {
               summary += `| ${e.num} | ${e.name.replace(/Desafio \d+ - /, '')} | ${e.passed ? '✅' : '❌'} |\n`;
             }
-
             if (bn.length) {
-              summary += `\n### ⭐ Bônus\n\n`;
-              summary += `| # | Nome | Avaliação |\n|---|---|:---:|\n`;
+              summary += `\n### ⭐ Bônus\n\n| # | Nome | Avaliação |\n|---|---|:---:|\n`;
               for (const e of bn) {
                 summary += `| ${e.num} | ${e.name.replace(/Desafio \d+ \(Bônus\) - /, '')} | ${e.passed ? '✅' : '❌'} |\n`;
               }
             }
-
             await core.summary.addRaw(summary).write();
 
   avaliar-python:
-    name: "🐍 Python"
+    name: "🐍 Testes Python (pytest)"
     runs-on: ubuntu-latest
+    needs: lint-python
     defaults:
       run:
         working-directory: python
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Instalar pytest
+      - name: Instalar dependências
         run: pip install pytest pytest-json-report
-
-      - name: Rodar testes e gerar relatório
-        run: |
-          pytest --json-report --json-report-file=../pytest-results.json || true
-
-      - name: Gerar Job Summary (tabela de resultados Python)
+      - name: Rodar testes
+        run: pytest --json-report --json-report-file=../pytest-results.json || true
+      - name: Gerar Job Summary
         uses: actions/github-script@v7
         with:
           script: |
@@ -122,42 +136,6 @@ jobs:
             const raw = fs.readFileSync('pytest-results.json', 'utf8');
             const data = JSON.parse(raw);
 
-            const obrigatorios = [];
-            const bonus = [];
-
-            for (const t of data.tests || []) {
-              const className = t.nodeid.split('::')[1] || '';
-              const passed = t.outcome === 'passed';
-              const num = parseInt(className.match(/\d+/)?.[0] || '0');
-              const entry = { name: className, passed, num };
-              if (num >= 11) bonus.push(entry);
-              else obrigatorios.push(entry);
-            }
-
-            const dedup = (arr) => {
-              const seen = new Set();
-              // marca como passed só se TODOS os testes da suite passarem
-              const map = {};
-              for (const e of arr) {
-                if (!map[e.name]) map[e.name] = { ...e, passed: true };
-                if (!e.passed) map[e.name].passed = false;
-              }
-              return Object.values(map).sort((a,b) => a.num - b.num);
-            };
-
-            const ob = dedup(obrigatorios);
-            const bn = dedup(bonus);
-
-            const passedOb = ob.filter(e => e.passed).length;
-            const passedBn = bn.filter(e => e.passed).length;
-            const pctOb = ob.length ? ((passedOb / ob.length) * 100).toFixed(1) : '0.0';
-            const pctTotal = (ob.length + bn.length)
-              ? (((passedOb + passedBn) / (ob.length + bn.length)) * 100).toFixed(1)
-              : '0.0';
-
-            const desempenho = parseFloat(pctOb) >= 70 ? '✅ Aprovado' : '❌ Insuficiente';
-
-            // Mapa de nomes bonitos
             const nomes = {
               'TestCompareTrue': 'Crie uma função usando o operador &&',
               'TestCalcArea': 'Crie uma função que calcule a área de um triângulo',
@@ -174,28 +152,41 @@ jobs:
               'TestHydrate': 'Crie uma função de boas-vindas ao Bar',
             };
 
-            let summary = `## 📊 Resultado do Projeto — Python\n\n`;
+            const map = {};
+            for (const t of data.tests || []) {
+              const className = t.nodeid.split('::')[1] || '';
+              const num = parseInt(className.match(/\d+/)?.[0] || '0');
+              if (!map[className]) map[className] = { name: className, passed: true, num };
+              if (t.outcome !== 'passed') map[className].passed = false;
+            }
+
+            const all = Object.values(map).sort((a, b) => a.num - b.num);
+            const ob = all.filter(e => e.num < 11);
+            const bn = all.filter(e => e.num >= 11);
+            const passedOb = ob.filter(e => e.passed).length;
+            const passedBn = bn.filter(e => e.passed).length;
+            const pctOb = ob.length ? ((passedOb / ob.length) * 100).toFixed(1) : '0.0';
+            const pctTotal = (ob.length + bn.length)
+              ? (((passedOb + passedBn) / (ob.length + bn.length)) * 100).toFixed(1)
+              : '0.0';
+            const desempenho = parseFloat(pctOb) >= 70 ? '✅ Aprovado' : '❌ Insuficiente';
+
+            let summary = `## 📊 Resultado — Python\n\n`;
             summary += `| Item | Resultado |\n|---|---|\n`;
             summary += `| Desempenho | **${desempenho}** |\n`;
-            summary += `| Percentual de requisitos obrigatórios | **${pctOb}%** |\n`;
-            summary += `| Percentual de requisitos totais | **${pctTotal}%** |\n\n`;
-
+            summary += `| Requisitos obrigatórios | **${pctOb}%** (${passedOb}/${ob.length}) |\n`;
+            summary += `| Requisitos totais | **${pctTotal}%** |\n\n`;
             summary += `## Resultado por requisito\n\n`;
             summary += `| # | Nome | Avaliação |\n|---|---|:---:|\n`;
             for (const e of ob) {
-              const label = nomes[e.name] || e.name;
-              summary += `| ${e.num} | ${label} | ${e.passed ? '✅' : '❌'} |\n`;
+              summary += `| ${e.num} | ${nomes[e.name] || e.name} | ${e.passed ? '✅' : '❌'} |\n`;
             }
-
             if (bn.length) {
-              summary += `\n### ⭐ Bônus\n\n`;
-              summary += `| # | Nome | Avaliação |\n|---|---|:---:|\n`;
+              summary += `\n### ⭐ Bônus\n\n| # | Nome | Avaliação |\n|---|---|:---:|\n`;
               for (const e of bn) {
-                const label = nomes[e.name] || e.name;
-                summary += `| ${e.num} | ${label} | ${e.passed ? '✅' : '❌'} |\n`;
+                summary += `| ${e.num} | ${nomes[e.name] || e.name} | ${e.passed ? '✅' : '❌'} |\n`;
               }
             }
-
             await core.summary.addRaw(summary).write();
 
   comentar-no-pr:
@@ -208,20 +199,23 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const jsStatus = '${{ needs.avaliar-javascript.result }}';
-            const pyStatus = '${{ needs.avaliar-python.result }}';
+            const jsLint  = '${{ needs.lint-javascript.result }}';
+            const pyLint  = '${{ needs.lint-python.result }}';
+            const jsTest  = '${{ needs.avaliar-javascript.result }}';
+            const pyTest  = '${{ needs.avaliar-python.result }}';
 
-            const icon = (s) => s === 'success' ? '✅' : '❌';
+            const icon = (s) => s === 'success' ? '✅' : s === 'skipped' ? '⏭️' : '❌';
 
             const body = [
               '## 🤖 Resultado da Avaliação Automática',
               '',
-              '| Linguagem | Status |',
-              '|---|:---:|',
-              `| 🟨 JavaScript | ${icon(jsStatus)} |`,
-              `| 🐍 Python     | ${icon(pyStatus)} |`,
+              '| Etapa | JavaScript | Python |',
+              '|---|:---:|:---:|',
+              `| 🔍 Lint | ${icon(jsLint)} | ${icon(pyLint)} |`,
+              `| 🧪 Testes | ${icon(jsTest)} | ${icon(pyTest)} |`,
               '',
-              '> Clique em **Details** ao lado de cada check para ver a tabela completa de requisitos.',
+              '> ⚠️ Os testes só rodam se o lint passar.',
+              '> Clique em **Details** ao lado de cada check para ver a tabela completa.',
             ].join('\n');
 
             await github.rest.issues.createComment({
