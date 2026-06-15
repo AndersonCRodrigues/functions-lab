@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "ms-python.python",
+    "ms-python.flake8",
+    "orta.vscode-jest",
+    "littlefoxteam.vscode-python-test-adapter",
+    "hbenl.vscode-test-explorer"
+  ]
+}

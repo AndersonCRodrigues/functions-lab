@@ -1,0 +1,39 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "JS: Rodar testes",
+      "type": "shell",
+      "command": "npm test",
+      "options": { "cwd": "${workspaceFolder}/javascript" },
+      "group": { "kind": "test", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "new" }
+    },
+    {
+      "label": "JS: Lint",
+      "type": "shell",
+      "command": "npm run lint",
+      "options": { "cwd": "${workspaceFolder}/javascript" },
+      "presentation": { "reveal": "always", "panel": "new" }
+    },
+    {
+      "label": "Python: Rodar testes",
+      "type": "shell",
+      "command": "pytest -v",
+      "options": { "cwd": "${workspaceFolder}/python" },
+      "presentation": { "reveal": "always", "panel": "new" }
+    },
+    {
+      "label": "Python: Lint",
+      "type": "shell",
+      "command": "flake8 challenges.py",
+      "options": { "cwd": "${workspaceFolder}/python" },
+      "presentation": { "reveal": "always", "panel": "new" }
+    },
+    {
+      "label": "Rodar tudo (JS + Python)",
+      "dependsOn": ["JS: Rodar testes", "Python: Rodar testes"],
+      "group": "test"
+    }
+  ]
+}
