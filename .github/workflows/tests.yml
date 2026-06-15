@@ -4,6 +4,12 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  checks: write
+
 jobs:
   lint-javascript:
     name: "🔍 Lint JavaScript (ESLint)"
@@ -70,7 +76,6 @@ jobs:
             const bonus = [];
 
             for (const suite of data.testResults) {
-              // Jest JSON usa assertionResults, não testResults
               const assertions = suite.assertionResults || [];
               for (const t of assertions) {
                 const passed = t.status === 'passed';
@@ -175,11 +180,7 @@ jobs:
             for (const t of data.tests || []) {
               const className = t.nodeid.split('::')[1] || '';
               if (!map[className]) {
-                map[className] = {
-                  name: className,
-                  passed: true,
-                  num: numeros[className] || 0,
-                };
+                map[className] = { name: className, passed: true, num: numeros[className] || 0 };
               }
               if (t.outcome !== 'passed') map[className].passed = false;
             }
@@ -234,6 +235,7 @@ jobs:
       - name: Comentar resultado no PR
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
             const jsLint = '${{ needs.lint-javascript.result }}';
